@@ -138,7 +138,7 @@ fn list(args: &Vec<String>) {
 
 fn zip(args: &Vec<String>) {
     if args.get(2).is_none() {
-        println!("Usage: prae zip <folder> [output]");
+        println!("Usage: prae zip <folder> [file]");
         std::process::exit(1);
     } else {
         let folder_name = args.get(2).unwrap();
@@ -181,7 +181,7 @@ fn zip(args: &Vec<String>) {
 
 fn unzip(args: &Vec<String>) {
     if args.get(2).is_none() {
-        println!("Usage: prae unzip <file> [output]");
+        println!("Usage: prae unzip <file> [folder]");
         std::process::exit(1);
     } else {
         let file_name = args.get(2).unwrap();
@@ -334,8 +334,8 @@ PRAE - Pyongyang Racer Asset Extractor
 
     Commands:
         help - Prints this help message.
-        zip <file> <folder> - Extracts the given archive to a folder.
-        unzip <folder> <file> - Compresses the given folder to an archive.
+        unzip <file> [folder] - Extracts the given archive to a folder.
+        zip <folder> [file] - Compresses the given folder to an archive.
         list <file> - Lists the files inside the given archive.
         ")
 
