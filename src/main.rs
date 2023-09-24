@@ -56,6 +56,7 @@ impl From<FileType> for u8 {
     }
 }
 
+#[allow(unreachable_patterns)]
 impl std::fmt::Display for FileType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -74,7 +75,6 @@ impl std::fmt::Display for FileType {
     }
 }
 
-#[derive(Debug)]
 struct FileMeta {
     path: String,
     file_type: FileType
@@ -286,6 +286,9 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         let file = texture_list.get(i).unwrap();
         let archive_path = Path::new(&file.path).strip_prefix(path.as_path()).unwrap();
         let archive_path_string = archive_path.as_os_str().to_str().unwrap().replace(MAIN_SEPARATOR_STR, "/");
+        if archive_path_string.len() > 255 {
+            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File path {} exceeds 255 characters", archive_path_string)));
+        }
         data.write_all(&u8::to_le_bytes(archive_path_string.len() as u8))?;
         data.write_all(archive_path_string.as_bytes())?;
         data.write_all(&u8::to_le_bytes(file.file_type.into()))?;
@@ -294,6 +297,9 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         let file = file_list.get(i).unwrap();
         let archive_path = Path::new(&file.path).strip_prefix(path.as_path()).unwrap();
         let archive_path_string = archive_path.as_os_str().to_str().unwrap().replace(MAIN_SEPARATOR_STR, "/");
+        if archive_path_string.len() > 255 {
+            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File path {} exceeds 255 characters", archive_path_string)));
+        }
         data.write_all(&u8::to_le_bytes(archive_path_string.len() as u8))?;
         data.write_all(archive_path_string.as_bytes())?;
         data.write_all(&u8::to_le_bytes(file.file_type.into()))?;
@@ -305,6 +311,9 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         let mut real_file = OpenOptions::new().read(true).open(&file.path)?;
         let mut buffer: Vec<u8> = Vec::new();
         real_file.read_to_end(&mut buffer)?;
+        if buffer.len() > i32::MAX.try_into().unwrap() {
+            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File {} exceeds 2GB", archive_path_string)));
+        }
         data.write_all(&i32::to_le_bytes(buffer.len() as i32))?;
         data.write(&buffer)?;
         println!("   {} ({:?})", archive_path_string, file.file_type);
@@ -316,6 +325,9 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         let mut real_file = OpenOptions::new().read(true).open(&file.path)?;
         let mut buffer: Vec<u8> = Vec::new();
         real_file.read_to_end(&mut buffer)?;
+        if buffer.len() > i32::MAX.try_into().unwrap() {
+            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File {} exceeds 2GB", archive_path_string)));
+        }
         data.write_all(&i32::to_le_bytes(buffer.len() as i32))?;
         data.write(&buffer)?;
         println!("   {} ({:?})", archive_path_string, file.file_type);
