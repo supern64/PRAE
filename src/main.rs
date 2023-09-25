@@ -22,8 +22,8 @@ enum FileType {
     Unknown = -1
 }
 
-impl From<u8> for FileType {
-    fn from(orig: u8) -> Self {
+impl From<i8> for FileType {
+    fn from(orig: i8) -> Self {
         match orig {
             0 => return FileType::Box,
             1 => return FileType::Obj,
@@ -39,7 +39,7 @@ impl From<u8> for FileType {
     }
 }
 
-impl From<FileType> for u8 {
+impl From<FileType> for i8 {
     fn from(orig: FileType) -> Self {
         match orig {
             FileType::Box => return 0,
@@ -51,7 +51,7 @@ impl From<FileType> for u8 {
             FileType::CarProperty => return 6,
             FileType::Mdl => return 7,
             FileType::Texture => return 10,
-            FileType::Unknown => return 255
+            FileType::Unknown => return -1
         }
     }
 }
@@ -110,7 +110,11 @@ fn read_and_decompress(file_name: &str, data: &mut Vec<u8>) {
         Ok(file) => file,
     };
     let mut decoder = DeflateDecoder::new(&mut file);
-    decoder.read_to_end(data).unwrap();
+    let decode = decoder.read_to_end(data);
+    if decode.is_err() {
+        println!("Couldn't read file {}: {}", path.display(), decode.err().unwrap());
+        std::process::exit(2);
+    }
 }
 
 fn list(args: &Vec<String>) {
@@ -122,14 +126,20 @@ fn list(args: &Vec<String>) {
         let mut data = Vec::new();
         read_and_decompress(file_name, &mut data);
         let number_of_files = i32::from_le_bytes(data[0..4].try_into().unwrap());
+        if number_of_files < 0 {
+            error("Invalid archive: negative number of files");
+        }
         println!("Found {} files.", number_of_files);
         let mut pointer: usize = 4;
         for _i in 0..number_of_files {
             let file_path_length = data[pointer] as usize;
+            if file_path_length > i8::MAX as usize {
+                error("Invalid archive: file size exceeds 127 characters");
+            }
             pointer += 1;
             let file_path = String::from_utf8(data[pointer..pointer + file_path_length].to_vec()).unwrap();
             pointer += file_path_length;
-            let file_type: u8 = data[pointer];
+            let file_type: i8 = data[pointer] as i8;
             println!("      {} ({:?})", file_path, FileType::from(file_type));
             pointer += 1;
         }
@@ -195,10 +205,13 @@ fn unzip(args: &Vec<String>) {
         let mut pointer: usize = 4;
         for _i in 0..number_of_files {
             let file_path_length = data[pointer] as usize;
+            if file_path_length > i8::MAX as usize {
+                error("Invalid archive: file size exceeds 127 characters");
+            }
             pointer += 1;
             let file_path = String::from_utf8(data[pointer..pointer + file_path_length].to_vec()).unwrap();
             pointer += file_path_length;
-            let file_type: u8 = data[pointer];
+            let file_type: i8 = data[pointer] as i8;
             let file_meta = FileMeta {
                 path: file_path,
                 file_type: FileType::from(file_type)
@@ -224,6 +237,10 @@ fn unzip(args: &Vec<String>) {
                 }
             };
             let size = i32::from_le_bytes(data[pointer..pointer + 4].try_into().unwrap());
+            if size < 0 {
+                println!("Invalid file: negative file size, skipping");
+                continue;
+            }
             pointer += 4;
             let data = &data[pointer..pointer + size as usize];
             match file.write_all(data) {
@@ -286,23 +303,23 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         let file = texture_list.get(i).unwrap();
         let archive_path = Path::new(&file.path).strip_prefix(path.as_path()).unwrap();
         let archive_path_string = archive_path.as_os_str().to_str().unwrap().replace(MAIN_SEPARATOR_STR, "/");
-        if archive_path_string.len() > 255 {
-            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File path {} exceeds 255 characters", archive_path_string)));
+        if archive_path_string.len() > i8::MAX as usize {
+            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File path {} exceeds 127 characters", archive_path_string)));
         }
-        data.write_all(&u8::to_le_bytes(archive_path_string.len() as u8))?;
+        data.write_all(&i8::to_le_bytes(archive_path_string.len() as i8))?;
         data.write_all(archive_path_string.as_bytes())?;
-        data.write_all(&u8::to_le_bytes(file.file_type.into()))?;
+        data.write_all(&i8::to_le_bytes(file.file_type.into()))?;
     }
     for i in 0..file_list.len() {
         let file = file_list.get(i).unwrap();
         let archive_path = Path::new(&file.path).strip_prefix(path.as_path()).unwrap();
         let archive_path_string = archive_path.as_os_str().to_str().unwrap().replace(MAIN_SEPARATOR_STR, "/");
-        if archive_path_string.len() > 255 {
-            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File path {} exceeds 255 characters", archive_path_string)));
+        if archive_path_string.len() > i8::MAX as usize {
+            return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File path {} exceeds 127 characters", archive_path_string)));
         }
-        data.write_all(&u8::to_le_bytes(archive_path_string.len() as u8))?;
+        data.write_all(&i8::to_le_bytes(archive_path_string.len() as i8))?;
         data.write_all(archive_path_string.as_bytes())?;
-        data.write_all(&u8::to_le_bytes(file.file_type.into()))?;
+        data.write_all(&i8::to_le_bytes(file.file_type.into()))?;
     }
     for i in 0..texture_list.len() {
         let file = texture_list.get(i).unwrap();
@@ -311,7 +328,7 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         let mut real_file = OpenOptions::new().read(true).open(&file.path)?;
         let mut buffer: Vec<u8> = Vec::new();
         real_file.read_to_end(&mut buffer)?;
-        if buffer.len() > i32::MAX.try_into().unwrap() {
+        if buffer.len() > i32::MAX as usize {
             return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File {} exceeds 2GB", archive_path_string)));
         }
         data.write_all(&i32::to_le_bytes(buffer.len() as i32))?;
@@ -325,7 +342,7 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         let mut real_file = OpenOptions::new().read(true).open(&file.path)?;
         let mut buffer: Vec<u8> = Vec::new();
         real_file.read_to_end(&mut buffer)?;
-        if buffer.len() > i32::MAX.try_into().unwrap() {
+        if buffer.len() > i32::MAX as usize {
             return Err::<(), std::io::Error>(std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("File {} exceeds 2GB", archive_path_string)));
         }
         data.write_all(&i32::to_le_bytes(buffer.len() as i32))?;
@@ -333,6 +350,11 @@ fn write_raw_data(data: &mut Vec<u8>, path: &PathBuf, texture_list: &Vec<FileMet
         println!("   {} ({:?})", archive_path_string, file.file_type);
     }
     Ok(())
+}
+
+fn error(message: &str) {
+    println!("{}", message);
+    std::process::exit(1);
 }
 
 fn print_help() {
